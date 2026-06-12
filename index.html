@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SGP Share - Download Sicuro</title>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #1e1e2e;
+            color: #cdd6f4;
+            text-align: center;
+            padding: 50px 20px;
+            margin: 0;
+        }
+        
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #252538;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+        }
+        
+        h1 {
+            color: #b4befe;
+            font-size: 28px;
+            margin-bottom: 20px;
+        }
+        
+        .loader {
+            border: 5px solid #313244;
+            border-top: 5px solid #b4befe;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 30px auto;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .status {
+            font-size: 16px;
+            color: #a6adc8;
+            line-height: 1.5;
+            margin-top: 10px;
+            word-wrap: break-word;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>🚀 SGP Share</h1>
+        <div id="loader" class="loader"></div>
+        <div id="status" class="status">Ricezione del file crittografato e decodifica in corso...</div>
+    </div>
+
+    <script>
+        async function decifraEScarica() {
+            const statusLabel = document.getElementById('status');
+            const loader = document.getElementById('loader');
+
+            try {
+                // 1. Estrazione dei parametri dall'URL Fragment dopo il carattere '#'
+                // Struttura: #LINK_LITTERBOX#CHIAVE_FERNET#NOME_FILE
+                const hashParams = window.location.hash.substring(1).split('#');
+                
+                if (hashParams.length < 3) {
+                    statusLabel.innerText = "❌ Errore: URL non valido o frammenti crittografici mancanti.";
+                    loader.style.display = "none";
+                    return;
+                }
+
+                const urlFileCifrato = hashParams[0];
+                const chiaveFernetB64 = hashParams[1];
+                const nomeFileOriginale = decodeURIComponent(hashParams[2]);
+
+                statusLabel.innerText = "🔒 Download del payload cifrato (.enc) dal cloud...";
+
+                // 2. Download del file cifrato in background tramite Fetch API
+                const risposta = await fetch(urlFileCifrato);
+                if (!risposta.ok) throw new Error("Impossibile raggiungere il server host.");
+                
+                const testoTokenCifrato = await risposta.text();
+
+                statusLabel.innerText = "⚡ Decrittografia AES-256 Client-Side in corso...";
+
+                // 3. Parsing della chiave Fernet Base64
+                const chiaveRaw = CryptoJS.enc.Base64.parse(chiaveFernetB64);
+                
+                // 4. Decodifica del token Fernet (Estrae IV e Ciphertext secondo lo standard)
+                const tokenBytes = CryptoJS.enc.Base64.parse(testoTokenCifrato.trim());
+                const tokenHex = CryptoJS.enc.Hex.stringify(tokenBytes);
+                
+                // specifiche Fernet: IV estratto dal byte 8 al 24; payload a seguire
+                const ivHex = tokenHex.substring(16, 48);
+                const ciphertextHex = tokenHex.substring(48, tokenHex.length - 64);
+                const encryptionKeyHex = CryptoJS.enc.Hex.stringify(chiaveRaw).substring(32, 64);
+
+                // 5. Esecuzione della decrittografia AES in modalità CBC
+                const decifrato = CryptoJS.AES.decrypt(
+                    { ciphertext: CryptoJS.enc.Hex.parse(ciphertextHex) },
+                    CryptoJS.enc.Hex.parse(encryptionKeyHex),
+                    { 
+                        iv: CryptoJS.enc.Hex.parse(ivHex), 
+                        mode: CryptoJS.mode.CBC, 
+                        padding: CryptoJS.pad.Pkcs7 
+                    }
+                );
+
+                // Convertiamo il risultato in una stringa binaria (Latin1)
+                const stringaDecifrata = decifrato.toString(CryptoJS.enc.Latin1);
+                if (!stringaDecifrata) throw new Error("Chiave errata o integrità del file compromessa.");
+
+                // 6. Ricostruzione del Blob binario originale del file
+                const byteNumbers = new Array(stringaDecifrata.length);
+                for (let i = 0; i < stringaDecifrata.length; i++) {
+                    byteNumbers[i] = stringaDecifrata.charCodeAt(i);
+                }
+                const fileBlob = new Blob([new Uint8Array(byteNumbers)], { type: "application/octet-stream" });
+
+                // 7. Trigger automatico del download del file originale in chiaro sullo smartphone
+                const downloadLink = document.createElement('a');
+                downloadLink.href = URL.createObjectURL(fileBlob);
+                downloadLink.download = nomeFileOriginale;
+                
+                document.body.appendChild(downloadLink);
+                downloadLink.click();
+                document.body.removeChild(downloadLink);
+
+                // Aggiornamento interfaccia a processo terminato
+                statusLabel.innerHTML = `✨ <strong>${nomeFileOriginale}</strong> decifrato e scaricato sul dispositivo con successo!`;
+                loader.style.display = "none";
+
+            } catch (errore) {
+                console.error(errore);
+                statusLabel.innerHTML = `<span style="color: #f38ba8;">❌ Errore durante l'operazione:</span><br>${errore.message}`;
+                loader.style.display = "none";
+            }
+        }
+
+        // Avvia la pipeline automatica non appena la pagina viene caricata sul browser del telefono
+        window.onload = decifraEScarica;
+    </script>
+</body>
+</html>
