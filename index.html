@@ -71,7 +71,6 @@
 
             try {
                 // 1. Estrazione dei parametri dall'URL Fragment dopo il carattere '#'
-                // Struttura: #LINK_LITTERBOX#CHIAVE_FERNET#NOME_FILE
                 const hashParams = window.location.hash.substring(1).split('#');
                 
                 if (hashParams.length < 3) {
@@ -84,11 +83,15 @@
                 const chiaveFernetB64 = hashParams[1];
                 const nomeFileOriginale = decodeURIComponent(hashParams[2]);
 
-                statusLabel.innerText = "🔒 Download del payload cifrato (.enc) dal cloud...";
+                statusLabel.innerText = "🔒 Download del payload cifrato tramite canale sicuro...";
 
-                // 2. Download del file cifrato in background tramite Fetch API
-                const risposta = await fetch(urlFileCifrato);
-                if (!risposta.ok) throw new Error("Impossibile raggiungere il server host.");
+                // 2. Risoluzione del blocco CORS tramite un CORS Proxy pubblico stabile
+                const corsProxy = "https://corsproxy.io/?";
+                const urlTargetConProxy = corsProxy + encodeURIComponent(urlFileCifrato);
+
+                // Download del file mascherato dal proxy
+                const risposta = await fetch(urlTargetConProxy);
+                if (!risposta.ok) throw new Error("Impossibile scaricare il file. Il link potrebbe essere scaduto.");
                 
                 const testoTokenCifrato = await risposta.text();
 
@@ -97,11 +100,11 @@
                 // 3. Parsing della chiave Fernet Base64
                 const chiaveRaw = CryptoJS.enc.Base64.parse(chiaveFernetB64);
                 
-                // 4. Decodifica del token Fernet (Estrae IV e Ciphertext secondo lo standard)
+                // 4. Decodifica del token Fernet (Estrae IV e Ciphertext secondo le specifiche del protocollo)
                 const tokenBytes = CryptoJS.enc.Base64.parse(testoTokenCifrato.trim());
                 const tokenHex = CryptoJS.enc.Hex.stringify(tokenBytes);
                 
-                // specifiche Fernet: IV estratto dal byte 8 al 24; payload a seguire
+                // Specifiche strutturali Fernet
                 const ivHex = tokenHex.substring(16, 48);
                 const ciphertextHex = tokenHex.substring(48, tokenHex.length - 64);
                 const encryptionKeyHex = CryptoJS.enc.Hex.stringify(chiaveRaw).substring(32, 64);
@@ -117,18 +120,18 @@
                     }
                 );
 
-                // Convertiamo il risultato in una stringa binaria (Latin1)
+                // Convertiamo il risultato in stringa binaria pura (Latin1)
                 const stringaDecifrata = decifrato.toString(CryptoJS.enc.Latin1);
-                if (!stringaDecifrata) throw new Error("Chiave errata o integrità del file compromessa.");
+                if (!stringaDecifrata) throw new Error("Decrittografia fallita. Chiave errata o token alterato.");
 
-                // 6. Ricostruzione del Blob binario originale del file
+                // 6. Ricostruzione del Blob binario originale del file scaricato
                 const byteNumbers = new Array(stringaDecifrata.length);
                 for (let i = 0; i < stringaDecifrata.length; i++) {
                     byteNumbers[i] = stringaDecifrata.charCodeAt(i);
                 }
                 const fileBlob = new Blob([new Uint8Array(byteNumbers)], { type: "application/octet-stream" });
 
-                // 7. Trigger automatico del download del file originale in chiaro sullo smartphone
+                // 7. Trigger automatico del download del file decodificato in chiaro
                 const downloadLink = document.createElement('a');
                 downloadLink.href = URL.createObjectURL(fileBlob);
                 downloadLink.download = nomeFileOriginale;
@@ -137,8 +140,7 @@
                 downloadLink.click();
                 document.body.removeChild(downloadLink);
 
-                // Aggiornamento interfaccia a processo terminato
-                statusLabel.innerHTML = `✨ <strong>${nomeFileOriginale}</strong> decifrato e scaricato sul dispositivo con successo!`;
+                statusLabel.innerHTML = `✨ <strong>${nomeFileOriginale}</strong> scaricato con successo sul dispositivo!`;
                 loader.style.display = "none";
 
             } catch (errore) {
@@ -148,7 +150,6 @@
             }
         }
 
-        // Avvia la pipeline automatica non appena la pagina viene caricata sul browser del telefono
         window.onload = decifraEScarica;
     </script>
 </body>
