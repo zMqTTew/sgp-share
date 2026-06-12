@@ -4,9 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SGP Share - Download Sicuro</title>
-    
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
-    
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -16,7 +14,6 @@
             padding: 50px 20px;
             margin: 0;
         }
-        
         .container {
             max-width: 600px;
             margin: 0 auto;
@@ -25,35 +22,14 @@
             border-radius: 12px;
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
         }
-        
-        h1 {
-            color: #b4befe;
-            font-size: 28px;
-            margin-bottom: 20px;
-        }
-        
+        h1 { color: #b4befe; font-size: 28px; margin-bottom: 20px; }
         .loader {
-            border: 5px solid #313244;
-            border-top: 5px solid #b4befe;
-            border-radius: 50%;
-            width: 50px;
-            height: 50px;
-            animation: spin 1s linear infinite;
-            margin: 30px auto;
+            border: 5px solid #313244; border-top: 5px solid #b4befe;
+            border-radius: 50%; width: 50px; height: 50px;
+            animation: spin 1s linear infinite; margin: 30px auto;
         }
-        
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        
-        .status {
-            font-size: 16px;
-            color: #a6adc8;
-            line-height: 1.5;
-            margin-top: 10px;
-            word-wrap: break-word;
-        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .status { font-size: 16px; color: #a6adc8; line-height: 1.5; margin-top: 10px; word-wrap: break-word; }
     </style>
 </head>
 <body>
@@ -70,86 +46,74 @@
             const loader = document.getElementById('loader');
 
             try {
-                // 1. Estrazione dei parametri dall'URL Fragment dopo il carattere '#'
-                const hashParams = window.location.hash.substring(1).split('#');
+                // Legge l'intero blocco dopo il singolo '#'
+                const hashIntero = window.location.hash.substring(1);
                 
-                if (hashParams.length < 3) {
-                    statusLabel.innerText = "❌ Errore: URL non valido o frammenti crittografici mancanti.";
+                // Divide i tre dati usando il separatore '|'
+                const parametri = hashIntero.split('|');
+                
+                if (parametri.length < 3) {
+                    statusLabel.innerText = "❌ Errore: URL non valido o parametri crittografici mancanti.";
                     loader.style.display = "none";
                     return;
                 }
 
-                const urlFileCifrato = hashParams[0];
-                const chiaveFernetB64 = hashParams[1];
-                const nomeFileOriginale = decodeURIComponent(hashParams[2]);
+                const urlFileCifrato = parametri[0];
+                const chiaveFernetB64 = parametri[1];
+                const nomeFileOriginale = decodeURIComponent(parametri[2]);
 
-                statusLabel.innerText = "🔒 Download del payload cifrato tramite canale sicuro...";
+                statusLabel.innerText = "🔒 Download del payload crittografato...";
 
-                // 2. Risoluzione del blocco CORS tramite un CORS Proxy pubblico stabile
-                const corsProxy = "https://corsproxy.io/?";
-                const urlTargetConProxy = corsProxy + encodeURIComponent(urlFileCifrato);
-
-                // Download del file mascherato dal proxy
-                const risposta = await fetch(urlTargetConProxy);
-                if (!risposta.ok) throw new Error("Impossibile scaricare il file. Il link potrebbe essere scaduto.");
+                // Scarica bypassando i blocchi CORS del browser mobile
+                const risposta = await fetch("https://corsproxy.io/?" + encodeURIComponent(urlFileCifrato));
+                if (!risposta.ok) throw new Error("Impossibile scaricare il file dal cloud.");
                 
-                const testoTokenCifrato = await risposta.text();
+                let testoTokenCifrato = await risposta.text();
+                testoTokenCifrato = testoTokenCifrato.trim();
 
-                statusLabel.innerText = "⚡ Decrittografia AES-256 Client-Side in corso...";
+                statusLabel.innerText = "⚡ Decrittografia AES-256 in corso...";
 
-                // 3. Parsing della chiave Fernet Base64
+                // Parsing e decodifica Fernet standard
                 const chiaveRaw = CryptoJS.enc.Base64.parse(chiaveFernetB64);
-                
-                // 4. Decodifica del token Fernet (Estrae IV e Ciphertext secondo le specifiche del protocollo)
-                const tokenBytes = CryptoJS.enc.Base64.parse(testoTokenCifrato.trim());
+                const tokenBytes = CryptoJS.enc.Base64.parse(testoTokenCifrato);
                 const tokenHex = CryptoJS.enc.Hex.stringify(tokenBytes);
                 
-                // Specifiche strutturali Fernet
                 const ivHex = tokenHex.substring(16, 48);
                 const ciphertextHex = tokenHex.substring(48, tokenHex.length - 64);
                 const encryptionKeyHex = CryptoJS.enc.Hex.stringify(chiaveRaw).substring(32, 64);
 
-                // 5. Esecuzione della decrittografia AES in modalità CBC
                 const decifrato = CryptoJS.AES.decrypt(
                     { ciphertext: CryptoJS.enc.Hex.parse(ciphertextHex) },
                     CryptoJS.enc.Hex.parse(encryptionKeyHex),
-                    { 
-                        iv: CryptoJS.enc.Hex.parse(ivHex), 
-                        mode: CryptoJS.mode.CBC, 
-                        padding: CryptoJS.pad.Pkcs7 
-                    }
+                    { iv: CryptoJS.enc.Hex.parse(ivHex), mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7 }
                 );
 
-                // Convertiamo il risultato in stringa binaria pura (Latin1)
                 const stringaDecifrata = decifrato.toString(CryptoJS.enc.Latin1);
-                if (!stringaDecifrata) throw new Error("Decrittografia fallita. Chiave errata o token alterato.");
+                if (!stringaDecifrata) throw new Error("Integrità compromessa o chiave errata.");
 
-                // 6. Ricostruzione del Blob binario originale del file scaricato
                 const byteNumbers = new Array(stringaDecifrata.length);
                 for (let i = 0; i < stringaDecifrata.length; i++) {
                     byteNumbers[i] = stringaDecifrata.charCodeAt(i);
                 }
                 const fileBlob = new Blob([new Uint8Array(byteNumbers)], { type: "application/octet-stream" });
 
-                // 7. Trigger automatico del download del file decodificato in chiaro
+                // Avvio download automatico dello sblocco
                 const downloadLink = document.createElement('a');
                 downloadLink.href = URL.createObjectURL(fileBlob);
                 downloadLink.download = nomeFileOriginale;
-                
                 document.body.appendChild(downloadLink);
                 downloadLink.click();
                 document.body.removeChild(downloadLink);
 
-                statusLabel.innerHTML = `✨ <strong>${nomeFileOriginale}</strong> scaricato con successo sul dispositivo!`;
+                statusLabel.innerHTML = `✨ <strong>${nomeFileOriginale}</strong> scaricato con successo!`;
                 loader.style.display = "none";
 
             } catch (errore) {
                 console.error(errore);
-                statusLabel.innerHTML = `<span style="color: #f38ba8;">❌ Errore durante l'operazione:</span><br>${errore.message}`;
+                statusLabel.innerHTML = `<span style="color: #f38ba8;">❌ Errore:</span><br>${errore.message}`;
                 loader.style.display = "none";
             }
         }
-
         window.onload = decifraEScarica;
     </script>
 </body>
